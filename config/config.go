@@ -17,6 +17,7 @@ type ConfigStruct struct {
 
 	SafePrimeGenTimeout time.Duration `long:"safe-prime-gen-timeout" description:"Safe prime generation timeout" default:"5m"`
 	DKGTimeout          time.Duration `long:"dkg-timeout" description:"DKG timeout" default:"5m"`
+	SigningTimeout      time.Duration `long:"signing-timeout" description:"Signing timeout" default:"10s"`
 }
 
 var config *ConfigStruct

@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SignerService_DKG_FullMethodName = "/signer.SignerService/DKG"
+	SignerService_DKG_FullMethodName  = "/signer.SignerService/DKG"
+	SignerService_Sign_FullMethodName = "/signer.SignerService/Sign"
 )
 
 // SignerServiceClient is the client API for SignerService service.
@@ -27,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SignerServiceClient interface {
 	DKG(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[DKGRequest, DKGResponse], error)
+	Sign(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SignRequest, SignResponse], error)
 }
 
 type signerServiceClient struct {
@@ -50,11 +52,25 @@ func (c *signerServiceClient) DKG(ctx context.Context, opts ...grpc.CallOption) 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SignerService_DKGClient = grpc.BidiStreamingClient[DKGRequest, DKGResponse]
 
+func (c *signerServiceClient) Sign(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SignRequest, SignResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &SignerService_ServiceDesc.Streams[1], SignerService_Sign_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SignRequest, SignResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SignerService_SignClient = grpc.BidiStreamingClient[SignRequest, SignResponse]
+
 // SignerServiceServer is the server API for SignerService service.
 // All implementations must embed UnimplementedSignerServiceServer
 // for forward compatibility.
 type SignerServiceServer interface {
 	DKG(grpc.BidiStreamingServer[DKGRequest, DKGResponse]) error
+	Sign(grpc.BidiStreamingServer[SignRequest, SignResponse]) error
 	mustEmbedUnimplementedSignerServiceServer()
 }
 
@@ -67,6 +83,9 @@ type UnimplementedSignerServiceServer struct{}
 
 func (UnimplementedSignerServiceServer) DKG(grpc.BidiStreamingServer[DKGRequest, DKGResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method DKG not implemented")
+}
+func (UnimplementedSignerServiceServer) Sign(grpc.BidiStreamingServer[SignRequest, SignResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method Sign not implemented")
 }
 func (UnimplementedSignerServiceServer) mustEmbedUnimplementedSignerServiceServer() {}
 func (UnimplementedSignerServiceServer) testEmbeddedByValue()                       {}
@@ -96,6 +115,13 @@ func _SignerService_DKG_Handler(srv interface{}, stream grpc.ServerStream) error
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SignerService_DKGServer = grpc.BidiStreamingServer[DKGRequest, DKGResponse]
 
+func _SignerService_Sign_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(SignerServiceServer).Sign(&grpc.GenericServerStream[SignRequest, SignResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SignerService_SignServer = grpc.BidiStreamingServer[SignRequest, SignResponse]
+
 // SignerService_ServiceDesc is the grpc.ServiceDesc for SignerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -107,6 +133,12 @@ var SignerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "DKG",
 			Handler:       _SignerService_DKG_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "Sign",
+			Handler:       _SignerService_Sign_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},
