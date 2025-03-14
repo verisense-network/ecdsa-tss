@@ -4,6 +4,7 @@ import (
 	"bsctss/config"
 	"fmt"
 	"os"
+	"path"
 	"time"
 
 	"go.uber.org/zap"
@@ -14,20 +15,20 @@ import (
 var Logger *zap.SugaredLogger
 
 func init() {
+	logDir := path.Join(config.Config().BasePath, config.Config().LogDir)
 	// Create log directory if not exists.
-	if err := os.MkdirAll("log", 0755); err != nil {
+	if err := os.MkdirAll(logDir, 0755); err != nil {
 		fmt.Println("Failed to create log directory:", err)
 	}
-	logDir := config.Config().LogDir
 	// Log file for all logs.
-	logFilename := fmt.Sprintf("%s/log_%s.log", logDir, time.Now().Format("2006-01-02-150405"))
+	logFilename := path.Join(logDir, fmt.Sprintf("log_%s.log", time.Now().Format("2006-01-02-150405")))
 	logFile, err := os.OpenFile(logFilename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Println("Failed to open log file:", err)
 	}
 
 	// Error log file for error-level and above.
-	errFilename := fmt.Sprintf("%s/error_%s.log", logDir, time.Now().Format("2006-01-02-150405"))
+	errFilename := path.Join(logDir, fmt.Sprintf("error_%s.log", time.Now().Format("2006-01-02-150405")))
 	errFile, err := os.OpenFile(errFilename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Println("Failed to open error log file:", err)

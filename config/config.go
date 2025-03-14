@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/jessevdk/go-flags"
 )
@@ -11,7 +12,11 @@ import (
 type ConfigStruct struct {
 	DisableLogCaller bool   `long:"disable-log-caller" description:"Whether to disable log caller location"`
 	LogLevel         string `long:"log-level" description:"Log level" default:"debug"`
-	LogDir           string `long:"log-dir" description:"Log directory" default:"./log"`
+	LogDir           string `long:"log-dir" description:"Log directory" default:"log"`
+	BasePath         string `long:"base-path" description:"Base path" default:"./"`
+
+	SafePrimeGenTimeout time.Duration `long:"safe-prime-gen-timeout" description:"Safe prime generation timeout" default:"5m"`
+	DKGTimeout          time.Duration `long:"dkg-timeout" description:"DKG timeout" default:"5m"`
 }
 
 var config *ConfigStruct
@@ -27,7 +32,7 @@ func Config() *ConfigStruct {
 }
 
 func FromFlags() error {
-	parser := flags.NewParser(config, flags.Default)
+	parser := flags.NewParser(config, flags.Default|flags.IgnoreUnknown)
 	_, err := parser.Parse()
 	if err != nil {
 		return err

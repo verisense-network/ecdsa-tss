@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package signer;
+option go_package = "bsctss/signer/proto;proto";
+
+service SignerService {
+  rpc DKG(stream DKGRequest) returns (stream DKGResponse);
+  // rpc Sign(stream SignRequest) returns (stream SignResponse);
+}
+// curve_id 0 for S256, 1 for P256
+message BaseInfo {
+  uint32 curve_id = 1;
+  uint32 id = 2;
+  uint32 threshold = 3;
+  repeated uint32 ids = 4;
+}
+
+message SignerToCoordinatorMsg {
+  bytes msg = 1;
+  bool is_broadcast = 2;
+  uint32 to = 3;
+}
+message CoordinatorToSignerMsg {
+  bytes msg = 1;
+  bool is_broadcast = 2;
+  uint32 from = 3;
+}
+
+// from rust to go
+message DKGRequest {
+  // init / intermediate
+  string req_type = 1;
+  BaseInfo base_info = 2;
+  // if is intermediate, coordinator_to_signer_msg is not nil
+  CoordinatorToSignerMsg coordinator_to_signer_msg = 3;
+}
+message KeyPackage {
+  bytes key_package = 1;
+}
+message DKGResponse {
+  // intermediate / final
+  string resp_type = 1;
+  // if is final, data is key package
+  KeyPackage key_package = 2;
+  // if is intermediate, signer_to_coordinator_msg is not nil
+  SignerToCoordinatorMsg signer_to_coordinator_msg = 3;
+}
