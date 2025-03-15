@@ -60,19 +60,23 @@ func signerDKG(ctx context.Context, curveId uint16, id uint16, parties []uint16,
 	}()
 
 	defer endWG.Wait()
-
+	dkgRawOut := []byte{}
+	endProcessed := false
 	for {
+		if endProcessed && len(out) == 0 && len(in) == 0 {
+			return dkgRawOut, nil
+		}
 		select {
 		case <-ctx.Done():
 			return nil, fmt.Errorf("DKG timed out: %w", ctx.Err())
 		case err := <-errChan:
 			return nil, fmt.Errorf("failed generating key: %w", err)
 		case dkgOut := <-end:
-			dkgRawOut, err := json.Marshal(*dkgOut)
+			dkgRawOut, err = json.Marshal(*dkgOut)
 			if err != nil {
 				return nil, fmt.Errorf("failed serializing DKG output: %w", err)
 			}
-			return dkgRawOut, nil
+			endProcessed = true
 		case msg := <-out:
 			msgBytes, routing, err := msg.WireBytes()
 			if err != nil {
@@ -148,10 +152,10 @@ func signerDeriveKeyPackage(ctx context.Context, curveId uint16, keyPackage []by
 	return derivedKeyPackage, deltaInt, nil
 }
 
-func signerSign(ctx context.Context, curveId uint16, id uint16, parties []uint16, threshold uint16, message []byte, keyPackage []byte, derivationDelta []byte, sendMsgAsync func(msg []byte, isBroadcast bool, to uint16) error, in chan *pb.CoordinatorToSignerMsg, logger *zap.SugaredLogger) ([]byte, error) {
-	if len(message) != 32 {
-		return nil, fmt.Errorf("message must be 32 bytes")
-	}
+func signerSign(ctx context.Context, curveId uint16, id uint16, parties []uint16, threshold uint16, message []byte, keyPackage []byte, derivationDelta []byte, sendMsgAsync func(msg []byte, isBroadcast bool, to uint16) error, in chan *pb.CoordinatorToSignerMsg, logger *zap.SugaredLogger) ([]byte, []byte, []byte, error) {
+	// if len(message) != 32 {
+	// 	return nil, nil, nil, fmt.Errorf("message must be 32 bytes")
+	// }
 	logger.Infof("start sign with id: %d, parties: %v, threshold: %d", id, parties, threshold)
 	partyIDs := numbersToPartyIDs(parties)
 	tssCtx := tss.NewPeerContext(partyIDs)
@@ -159,18 +163,18 @@ func signerSign(ctx context.Context, curveId uint16, id uint16, parties []uint16
 	pid := numberToPartyID(id)
 	params := tss.NewParameters(curve, tssCtx, pid, len(parties), int(threshold))
 	pid.Index = locatePartyIndex(params, pid)
-
-	// localPartySaveData, _, err := bytesToLocalPartySaveData(curveId, keyPackage)
-	// if err != nil {
-	// 	logger.Errorf("failed to convert to local party save data: %v", err)
-	// 	return nil, err
-	// }
+	localPartySaveData, err := bytesToLocalPartySaveData(curveId, keyPackage)
+	if err != nil {
+		logger.Errorf("failed to convert to local party save data: %v", err)
+		return nil, nil, nil, err
+	}
+	publicKey := ecPointToETHPubKey(localPartySaveData.ECDSAPub)
 	localPartySaveData, deltaInt, err := signerDeriveKeyPackage(ctx, curveId, keyPackage, derivationDelta, logger)
 	if err != nil {
 		logger.Errorf("failed to derive key package: %v", err)
-		return nil, err
+		return nil, nil, nil, err
 	}
-
+	publicKeyDerived := ecPointToETHPubKey(localPartySaveData.ECDSAPub)
 	out := make(chan tss.Message, 100)
 	end := make(chan *common.SignatureData, 1)
 	msgToSign := hashToInt(message, curve)
@@ -190,16 +194,20 @@ func signerSign(ctx context.Context, curveId uint16, id uint16, parties []uint16
 	}()
 
 	defer endWG.Wait()
-
+	endProcessed := false
+	sigRaw := []byte{}
 	for {
+		if endProcessed && len(out) == 0 && len(in) == 0 {
+			return sigRaw, publicKey, publicKeyDerived, nil
+		}
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("signing timed out: %w", ctx.Err())
+			return nil, nil, nil, fmt.Errorf("signing timed out: %w", ctx.Err())
 		case err := <-errChan:
-			return nil, fmt.Errorf("failed signing: %w", err)
+			return nil, nil, nil, fmt.Errorf("failed signing: %w", err)
 		case sigOut := <-end:
 			if !bytes.Equal(sigOut.M, message) {
-				return nil, fmt.Errorf("message we requested to sign is %s but actual message signed is %s",
+				return nil, nil, nil, fmt.Errorf("message we requested to sign is %s but actual message signed is %s",
 					base64.StdEncoding.EncodeToString(msgToSign.Bytes()),
 					base64.StdEncoding.EncodeToString(sigOut.M))
 			}
@@ -210,26 +218,26 @@ func signerSign(ctx context.Context, curveId uint16, id uint16, parties []uint16
 			sig.S = big.NewInt(0)
 			sig.R.SetBytes(sigOut.R)
 			sig.S.SetBytes(sigOut.S)
-			sigRaw := ToEthereumSignature(sig.R, sig.S)
-			return sigRaw, nil
+			sigRaw = ToEthereumSignature(sig.R, sig.S)
+			endProcessed = true
 		case msg := <-out:
 			msgBytes, routing, err := msg.WireBytes()
 			if err != nil {
 				logger.Errorf("Failed marshaling message: %v", err)
-				return nil, fmt.Errorf("failed marshaling message: %w", err)
+				return nil, nil, nil, fmt.Errorf("failed marshaling message: %w", err)
 			}
 			if routing.IsBroadcast {
 				err := sendMsgAsync(msgBytes, routing.IsBroadcast, 0)
 				if err != nil {
 					logger.Errorf("Failed sending broadcast message: %v", err)
-					return nil, fmt.Errorf("failed sending broadcast message: %w", err)
+					return nil, nil, nil, fmt.Errorf("failed sending broadcast message: %w", err)
 				}
 			} else {
 				for _, to := range msg.GetTo() {
 					err := sendMsgAsync(msgBytes, routing.IsBroadcast, uint16(big.NewInt(0).SetBytes(to.Key).Uint64()))
 					if err != nil {
 						logger.Errorf("Failed sending message to %s: %v", to.Id, err)
-						return nil, fmt.Errorf("failed sending message to %s: %w", to.Id, err)
+						return nil, nil, nil, fmt.Errorf("failed sending message to %s: %w", to.Id, err)
 					}
 				}
 			}

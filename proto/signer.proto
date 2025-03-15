@@ -26,6 +26,11 @@ message KeyPackage {
   // optional in request
   bytes public_key = 2;
 }
+message Signature {
+  bytes signature = 1;
+  bytes public_key = 2;
+  bytes public_key_derived = 3;
+}
 message PkRequest {
   uint32 curve_id = 1;
   KeyPackage key_package = 2;
@@ -55,7 +60,7 @@ message DKGRequest {
   CoordinatorToSignerMsg coordinator_to_signer_msg = 3;
 }
 message DKGResponse {
-  // intermediate / final / empty
+  // intermediate / final / empty / error
   // the first response from coordinator to signer must be empty, since go-grpc will not send header for connection and tonic client will be blocked
   // see the issue in https://github.com/hyperium/tonic/issues/515
   string resp_type = 1;
@@ -63,21 +68,28 @@ message DKGResponse {
   KeyPackage key_package = 2;
   // if is intermediate, signer_to_coordinator_msg is not nil
   SignerToCoordinatorMsg signer_to_coordinator_msg = 3;
+  // if is error, error is not nil
+  string error = 4;
 }
 
 message SignRequest{
-  // init / intermediate / error string
+  // init / intermediate 
   string req_type = 1;
   SigningInfo signing_info = 2;
   // if is intermediate, coordinator_to_signer_msg is not nil
   CoordinatorToSignerMsg coordinator_to_signer_msg = 3;
 }
 
+
 message SignResponse{
-  // intermediate / final
+  // intermediate / final / empty / error
+  // the first response from signer to coordinator must be empty, since go-grpc will not send header for connection and tonic client will be blocked
+  // see the issue in https://github.com/hyperium/tonic/issues/515
   string resp_type = 1;
   // if is final, data is signature
-  bytes signature = 2;
+  Signature signature = 2;
   // if is intermediate, signer_to_coordinator_msg is not nil
   SignerToCoordinatorMsg signer_to_coordinator_msg = 3;
+  // if is error, error is not nil
+  string error = 4;
 }

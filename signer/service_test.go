@@ -181,8 +181,11 @@ func singleNodeSign(ctx context.Context, t *testing.T, port uint16, id uint32, i
 				end <- err
 				return
 			}
+			if resp.RespType == "empty" {
+				continue
+			}
 			if resp.RespType == "final" {
-				signature <- resp.Signature
+				signature <- resp.Signature.Signature
 				return
 			}
 			out <- resp

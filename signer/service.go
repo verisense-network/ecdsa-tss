@@ -88,22 +88,34 @@ func (s *SignerServer) DKG(stream pb.SignerService_DKGServer) error {
 	req, err := stream.Recv()
 	if err == io.EOF {
 		logger.Warn("client closed stream (EOF)")
-		return nil
+		return stream.Send(&pb.DKGResponse{
+			RespType: "error",
+			Error:    "client closed stream (EOF)",
+		})
 	}
 	if err != nil {
 		logger.Errorf("receive error: %v\n", err)
-		return err
+		return stream.Send(&pb.DKGResponse{
+			RespType: "error",
+			Error:    fmt.Sprintf("receive error: %v\n", err),
+		})
 	}
 	logger.Debugf("DKG request: %v", req)
 	// req.ReqType must be "init"
 	if req.ReqType != "init" {
 		logger.Errorf("the first request from client must be init, but got %s", req.ReqType)
-		return status.Error(codes.InvalidArgument, fmt.Sprintf("the first request from client must be init, but got %s", req.ReqType))
+		return stream.Send(&pb.DKGResponse{
+			RespType: "error",
+			Error:    fmt.Sprintf("the first request from client must be init, but got %s", req.ReqType),
+		})
 	}
 	curveId, id, ids, threshold, err := checkBaseInfo(req.BaseInfo)
 	if err != nil {
 		logger.Errorf("invalid base info: %v", err)
-		return err
+		return stream.Send(&pb.DKGResponse{
+			RespType: "error",
+			Error:    fmt.Sprintf("invalid base info: %v", err),
+		})
 	}
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(config.Config().DKGTimeout))
 	defer cancel()
@@ -127,12 +139,18 @@ func (s *SignerServer) DKG(stream pb.SignerService_DKGServer) error {
 	}, in, logger)
 	if err != nil {
 		logger.Errorf("failed to generate key: %v", err)
-		return status.Error(codes.Internal, fmt.Sprintf("failed to generate key: %v", err))
+		return stream.Send(&pb.DKGResponse{
+			RespType: "error",
+			Error:    fmt.Sprintf("failed to generate key: %v", err),
+		})
 	}
 	keyPackage, err := bytesToLocalPartySaveData(0, rawOut)
 	if err != nil {
 		logger.Errorf("failed to convert to local party save data: %v", err)
-		return status.Error(codes.Internal, fmt.Sprintf("failed to convert to local party save data: %v", err))
+		return stream.Send(&pb.DKGResponse{
+			RespType: "error",
+			Error:    fmt.Sprintf("failed to convert to local party save data: %v", err),
+		})
 	}
 	resp := &pb.DKGResponse{
 		RespType: "final",
@@ -146,30 +164,46 @@ func (s *SignerServer) DKG(stream pb.SignerService_DKGServer) error {
 func (s *SignerServer) Sign(stream pb.SignerService_SignServer) error {
 	sessionID := uuid.New().String()
 	logger := logger.Logger.With("session_id", sessionID)
+	logger.Info("Signing Started")
+	stream.Send(&pb.SignResponse{
+		RespType: "empty",
+	})
 	req, err := stream.Recv()
 	if err == io.EOF {
 		logger.Warn("client closed stream (EOF)")
-		return nil
+		return stream.Send(&pb.SignResponse{
+			RespType: "error",
+			Error:    "client closed stream (EOF)",
+		})
 	}
 	if err != nil {
 		logger.Error("receive error: %v\n", err)
-		return err
+		return stream.Send(&pb.SignResponse{
+			RespType: "error",
+			Error:    fmt.Sprintf("receive error: %v\n", err),
+		})
 	}
 	// req.ReqType must be "init"
 	if req.ReqType != "init" {
 		logger.Errorf("the first request from client must be init, but got %s", req.ReqType)
-		return status.Error(codes.InvalidArgument, fmt.Sprintf("the first request from client must be init, but got %s", req.ReqType))
+		return stream.Send(&pb.SignResponse{
+			RespType: "error",
+			Error:    fmt.Sprintf("the first request from client must be init, but got %s", req.ReqType),
+		})
 	}
 	curveId, id, ids, threshold, err := checkBaseInfo(req.SigningInfo.BaseInfo)
 	if err != nil {
 		logger.Errorf("invalid base info: %v", err)
-		return err
+		return stream.Send(&pb.SignResponse{
+			RespType: "error",
+			Error:    fmt.Sprintf("invalid base info: %v", err),
+		})
 	}
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(config.Config().SigningTimeout))
 	defer cancel()
 	in := make(chan *pb.CoordinatorToSignerMsg, 1000)
 	go listenSignCoordinatorToSignerMsg(stream, in, logger)
-	signature, err := signerSign(ctx, curveId, id, ids, threshold-1, req.SigningInfo.Message, req.SigningInfo.KeyPackage.KeyPackage, req.SigningInfo.DerivationDelta, func(msg []byte, isBroadcast bool, to uint16) error {
+	signature, publicKey, publicKeyDerived, err := signerSign(ctx, curveId, id, ids, threshold-1, req.SigningInfo.Message, req.SigningInfo.KeyPackage.KeyPackage, req.SigningInfo.DerivationDelta, func(msg []byte, isBroadcast bool, to uint16) error {
 		// logger.Infof("Signing stream started for session %s with req %v", sessionID, req)
 		resp := &pb.SignResponse{
 			RespType: "intermediate",
@@ -187,11 +221,14 @@ func (s *SignerServer) Sign(stream pb.SignerService_SignServer) error {
 	}, in, logger)
 	if err != nil {
 		logger.Errorf("failed to sign: %v", err)
-		return status.Error(codes.Internal, fmt.Sprintf("failed to sign: %v", err))
+		return stream.Send(&pb.SignResponse{
+			RespType: "error",
+			Error:    fmt.Sprintf("failed to sign: %v", err),
+		})
 	}
 	resp := &pb.SignResponse{
 		RespType:  "final",
-		Signature: signature,
+		Signature: &pb.Signature{Signature: signature, PublicKey: publicKey, PublicKeyDerived: publicKeyDerived},
 	}
 	return stream.Send(resp)
 }

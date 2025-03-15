@@ -31,6 +31,15 @@ pub struct KeyPackage {
     pub public_key: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Signature {
+    #[prost(bytes = "vec", tag = "1")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub public_key: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub public_key_derived: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PkRequest {
     #[prost(uint32, tag = "1")]
     pub curve_id: u32,
@@ -76,7 +85,7 @@ pub struct DkgRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DkgResponse {
-    /// intermediate / final / empty
+    /// intermediate / final / empty / error
     /// the first response from coordinator to signer must be empty, since go-grpc will not send header for connection and tonic client will be blocked
     /// see the issue in <https://github.com/hyperium/tonic/issues/515>
     #[prost(string, tag = "1")]
@@ -87,10 +96,13 @@ pub struct DkgResponse {
     /// if is intermediate, signer_to_coordinator_msg is not nil
     #[prost(message, optional, tag = "3")]
     pub signer_to_coordinator_msg: ::core::option::Option<SignerToCoordinatorMsg>,
+    /// if is error, error is not nil
+    #[prost(string, tag = "4")]
+    pub error: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignRequest {
-    /// init / intermediate / error string
+    /// init / intermediate
     #[prost(string, tag = "1")]
     pub req_type: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
@@ -101,15 +113,20 @@ pub struct SignRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignResponse {
-    /// intermediate / final
+    /// intermediate / final / empty / error
+    /// the first response from signer to coordinator must be empty, since go-grpc will not send header for connection and tonic client will be blocked
+    /// see the issue in <https://github.com/hyperium/tonic/issues/515>
     #[prost(string, tag = "1")]
     pub resp_type: ::prost::alloc::string::String,
     /// if is final, data is signature
-    #[prost(bytes = "vec", tag = "2")]
-    pub signature: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "2")]
+    pub signature: ::core::option::Option<Signature>,
     /// if is intermediate, signer_to_coordinator_msg is not nil
     #[prost(message, optional, tag = "3")]
     pub signer_to_coordinator_msg: ::core::option::Option<SignerToCoordinatorMsg>,
+    /// if is error, error is not nil
+    #[prost(string, tag = "4")]
+    pub error: ::prost::alloc::string::String,
 }
 /// Generated client implementations.
 pub mod signer_service_client {
