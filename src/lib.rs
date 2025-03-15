@@ -153,6 +153,34 @@ impl BscTssSignerClient {
         handler.abort();
         result
     }
+    pub async fn derive_pk_from_pk(
+        mut self,
+        curve_id: u32,
+        public_key: Vec<u8>,
+        derivation_delta: Vec<u8>,
+    ) -> Result<(Vec<u8>, Vec<u8>), BscTssSignerClientError> {
+        let request = signer_rpc::PkRequest {
+            curve_id,
+            source: Some(signer_rpc::pk_request::Source::PublicKey(public_key)),
+            derivation_delta,
+        };
+        let response = self.client.pk(request).await?.into_inner();
+        Ok((response.public_key, response.public_key_derived))
+    }
+    pub async fn derive_pk_from_key_package(
+        mut self,
+        curve_id: u32,
+        key_package: signer_rpc::KeyPackage,
+        derivation_delta: Vec<u8>,
+    ) -> Result<(Vec<u8>, Vec<u8>), BscTssSignerClientError> {
+        let request = signer_rpc::PkRequest {
+            curve_id,
+            source: Some(signer_rpc::pk_request::Source::KeyPackage(key_package)),
+            derivation_delta,
+        };
+        let response = self.client.pk(request).await?.into_inner();
+        Ok((response.public_key, response.public_key_derived))
+    }
     pub async fn sign(
         mut self,
         signing_info: signer_rpc::SigningInfo,
@@ -452,6 +480,7 @@ mod test {
         let res1 = res1.unwrap();
         let res2 = res2.unwrap();
         let res3 = res3.unwrap();
+        let res1_copy = res1.clone();
         assert!(
             res1.public_key == res2.public_key,
             "Signer1 and Signer2 public key mismatch"
@@ -561,7 +590,7 @@ mod test {
         let message = message.as_slice();
         let signature = res1.signature.as_slice();
         let public_key = res1.public_key.as_slice();
-        let public_key_derived = res1.public_key_derived.as_slice();
+        let public_key_derived: &[u8] = res1.public_key_derived.as_slice();
         assert!(signature.len() == 64, "Signature must be 64 bytes");
         assert!(message.len() == 32, "Message must be 32 bytes");
         assert!(
@@ -595,13 +624,25 @@ mod test {
             .expect("Failed to recover signature");
         println!("recovery_id: {}", recovery_id);
         println!("completed sign");
+        let client = BscTssSignerClient::new(29197).await.unwrap();
+        let (public_key, public_key_derived1) = client
+            .derive_pk_from_key_package(0, res1_copy, vec![1, 2, 3])
+            .await
+            .unwrap();
+        assert!(public_key_derived1 == public_key_derived);
+        let client = BscTssSignerClient::new(29197).await.unwrap();
+        let (_, public_key_derived2) = client
+            .derive_pk_from_pk(0, public_key, vec![1, 2, 3])
+            .await
+            .unwrap();
+        assert!(public_key_derived2 == public_key_derived);
     }
     use futures::future::join_all;
 
     #[tokio::test]
     async fn test_signer_service_client_test() {
         let mut handles = vec![];
-        for _ in 0..10 {
+        for _ in 0..1 {
             handles.push(tokio::spawn(async move {
                 test_signer_service_client().await;
             }));

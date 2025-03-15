@@ -33,11 +33,15 @@ message Signature {
 }
 message PkRequest {
   uint32 curve_id = 1;
-  KeyPackage key_package = 2;
-  bytes derivation_delta = 3;
+  oneof source {
+    KeyPackage key_package = 2;
+    bytes public_key = 3;
+  }
+  bytes derivation_delta = 4;
 }
 message PkResponse {
   bytes public_key = 1;
+  bytes public_key_derived = 2;
 }
 
 message SignerToCoordinatorMsg {

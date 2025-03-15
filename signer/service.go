@@ -11,7 +11,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -240,18 +239,37 @@ func (s *SignerServer) Pk(ctx context.Context, req *pb.PkRequest) (*pb.PkRespons
 		logger.Errorf("invalid curve_id: %v", err)
 		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid curve_id: %v", err))
 	}
-	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(config.Config().SigningTimeout))
-	defer cancel()
-	localPartySaveData, _, err := signerDeriveKeyPackage(ctx, curveId, req.KeyPackage.KeyPackage, req.DerivationDelta, logger)
-	if err != nil {
-		logger.Errorf("failed to convert to local party save data: %v", err)
-		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to convert to local party save data: %v", err))
+	if req.Source == nil {
+		logger.Errorf("source is nil")
+		return nil, status.Error(codes.InvalidArgument, "source is nil")
 	}
-	pk := localPartySaveData.ECDSAPub.ToECDSAPubKey()
-	pkBytes := crypto.FromECDSAPub(pk)
-	return &pb.PkResponse{
-		PublicKey: pkBytes,
-	}, nil
+	switch req.Source.(type) {
+	case *pb.PkRequest_KeyPackage:
+		// reflect req.Option
+		keyPackage := req.Source.(*pb.PkRequest_KeyPackage).KeyPackage
+		keyPackageOriginal, keyPackageDerived, _, err := signerDeriveKeyPackageAndUpdateShamirShares(curveId, keyPackage.KeyPackage, req.DerivationDelta, logger)
+		if err != nil {
+			logger.Errorf("failed to convert to local party save data: %v", err)
+			return nil, status.Error(codes.Internal, fmt.Sprintf("failed to convert to local party save data: %v", err))
+		}
+		return &pb.PkResponse{
+			PublicKey:        ecPointToETHPubKey(keyPackageOriginal.ECDSAPub),
+			PublicKeyDerived: ecPointToETHPubKey(keyPackageDerived.ECDSAPub),
+		}, nil
+	case *pb.PkRequest_PublicKey:
+		publicKey := req.Source.(*pb.PkRequest_PublicKey).PublicKey
+
+		publicKeyDerived, _, err := signerDerivePublicKey(curveId, publicKey, req.DerivationDelta, logger)
+		if err != nil {
+			logger.Errorf("failed to derive public key: %v", err)
+			return nil, status.Error(codes.Internal, fmt.Sprintf("failed to derive public key: %v", err))
+		}
+		return &pb.PkResponse{
+			PublicKey:        publicKey,
+			PublicKeyDerived: ecPointToETHPubKey(publicKeyDerived),
+		}, nil
+	}
+	return nil, status.Error(codes.InvalidArgument, "invalid option")
 }
 func listenDKGCoordinatorToSignerMsg(stream pb.SignerService_DKGServer, in chan *pb.CoordinatorToSignerMsg, logger *zap.SugaredLogger) {
 	for {

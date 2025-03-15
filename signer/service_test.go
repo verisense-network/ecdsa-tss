@@ -418,11 +418,25 @@ func TestSign(t *testing.T) {
 	client := pb.NewSignerServiceClient(conn)
 	resp, err := client.Pk(context.Background(), &pb.PkRequest{
 		CurveId:         0,
-		KeyPackage:      &pb.KeyPackage{KeyPackage: []byte(key2)},
+		Source:          &pb.PkRequest_KeyPackage{KeyPackage: &pb.KeyPackage{KeyPackage: []byte(key2)}},
 		DerivationDelta: []byte{1, 2, 3, 4},
 	})
+
 	if err != nil {
 		t.Fatalf("recv error: %v", err)
 	}
-	assert.True(t, verifySignature(keccak256([]byte("test")), sig, resp.PublicKey))
+	assert.True(t, verifySignature(keccak256([]byte("test")), sig, resp.PublicKeyDerived))
+	respCopy := resp
+	client = pb.NewSignerServiceClient(conn)
+	resp, err = client.Pk(context.Background(), &pb.PkRequest{
+		CurveId:         0,
+		Source:          &pb.PkRequest_PublicKey{PublicKey: resp.PublicKey},
+		DerivationDelta: []byte{1, 2, 3, 4},
+	})
+
+	if err != nil {
+		t.Fatalf("recv error: %v", err)
+	}
+	assert.Equal(t, respCopy, resp)
+	assert.True(t, verifySignature(keccak256([]byte("test")), sig, resp.PublicKeyDerived))
 }

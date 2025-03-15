@@ -16,6 +16,7 @@ import (
 	pb "bsctss/signer/proto"
 
 	"github.com/bnb-chain/tss-lib/v2/common"
+	crypto_tss "github.com/bnb-chain/tss-lib/v2/crypto"
 	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
 	"github.com/bnb-chain/tss-lib/v2/ecdsa/signing"
 	"github.com/bnb-chain/tss-lib/v2/tss"
@@ -136,20 +137,35 @@ func signerDKG(ctx context.Context, curveId uint16, id uint16, parties []uint16,
 
 }
 
-func signerDeriveKeyPackage(ctx context.Context, curveId uint16, keyPackage []byte, derivationDelta []byte, logger *zap.SugaredLogger) (*keygen.LocalPartySaveData, *big.Int, error) {
+func signerDeriveKeyPackageAndUpdateShamirShares(curveId uint16, keyPackage []byte, derivationDelta []byte, logger *zap.SugaredLogger) (*keygen.LocalPartySaveData, *keygen.LocalPartySaveData, *big.Int, error) {
 	curve := curveIdToCurve(curveId)
 	localPartySaveData, err := bytesToLocalPartySaveData(curveId, keyPackage)
 	if err != nil {
 		logger.Errorf("failed to convert to local party save data: %v", err)
+		return nil, nil, nil, err
+	}
+	hash := sha256.Sum256(derivationDelta)
+	derivedKeyPackage, deltaInt, err := derivePublicKeyAndUpdateShamirShares(curve, *localPartySaveData, hash[:], true)
+	if err != nil {
+		logger.Errorf("failed to derive public key: %v", err)
+		return nil, nil, nil, err
+	}
+	return localPartySaveData, derivedKeyPackage, deltaInt, nil
+}
+func signerDerivePublicKey(curveId uint16, publicKey []byte, derivationDelta []byte, logger *zap.SugaredLogger) (*crypto_tss.ECPoint, *big.Int, error) {
+	curve := curveIdToCurve(curveId)
+	pk, err := ETHPubKeyToECPoint(publicKey)
+	if err != nil {
+		logger.Errorf("failed to convert to ec point: %v", err)
 		return nil, nil, err
 	}
 	hash := sha256.Sum256(derivationDelta)
-	derivedKeyPackage, deltaInt, err := derivePublicKey(curve, *localPartySaveData, hash[:], true)
+	derivedPk, deltaInt, err := derivePublicKeyPk(curve, pk, hash[:], true)
 	if err != nil {
 		logger.Errorf("failed to derive public key: %v", err)
 		return nil, nil, err
 	}
-	return derivedKeyPackage, deltaInt, nil
+	return derivedPk, deltaInt, nil
 }
 
 func signerSign(ctx context.Context, curveId uint16, id uint16, parties []uint16, threshold uint16, message []byte, keyPackage []byte, derivationDelta []byte, sendMsgAsync func(msg []byte, isBroadcast bool, to uint16) error, in chan *pb.CoordinatorToSignerMsg, logger *zap.SugaredLogger) ([]byte, []byte, []byte, error) {
@@ -163,23 +179,18 @@ func signerSign(ctx context.Context, curveId uint16, id uint16, parties []uint16
 	pid := numberToPartyID(id)
 	params := tss.NewParameters(curve, tssCtx, pid, len(parties), int(threshold))
 	pid.Index = locatePartyIndex(params, pid)
-	localPartySaveData, err := bytesToLocalPartySaveData(curveId, keyPackage)
-	if err != nil {
-		logger.Errorf("failed to convert to local party save data: %v", err)
-		return nil, nil, nil, err
-	}
-	publicKey := ecPointToETHPubKey(localPartySaveData.ECDSAPub)
-	localPartySaveData, deltaInt, err := signerDeriveKeyPackage(ctx, curveId, keyPackage, derivationDelta, logger)
+	keyPackageOriginal, keyPackageDerived, deltaInt, err := signerDeriveKeyPackageAndUpdateShamirShares(curveId, keyPackage, derivationDelta, logger)
 	if err != nil {
 		logger.Errorf("failed to derive key package: %v", err)
 		return nil, nil, nil, err
 	}
-	publicKeyDerived := ecPointToETHPubKey(localPartySaveData.ECDSAPub)
+	publicKeyDerived := ecPointToETHPubKey(keyPackageDerived.ECDSAPub)
+	publicKey := ecPointToETHPubKey(keyPackageOriginal.ECDSAPub)
 	out := make(chan tss.Message, 100)
 	end := make(chan *common.SignatureData, 1)
 	msgToSign := hashToInt(message, curve)
 	// nine rounds
-	party := signing.NewLocalPartyWithKDD(msgToSign, params, *localPartySaveData, deltaInt, out, end)
+	party := signing.NewLocalPartyWithKDD(msgToSign, params, *keyPackageDerived, deltaInt, out, end)
 
 	var endWG sync.WaitGroup
 	endWG.Add(1)

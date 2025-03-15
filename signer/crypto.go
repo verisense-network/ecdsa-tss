@@ -104,7 +104,7 @@ func ToEthereumSignature(r, s *big.Int) []byte {
 	sig := append(rPadded, sPadded...)
 	return sig
 }
-func derivePublicKey(ec elliptic.Curve, key keygen.LocalPartySaveData, code []byte, hardened bool) (*keygen.LocalPartySaveData, *big.Int, error) {
+func derivePublicKeyAndUpdateShamirShares(ec elliptic.Curve, key keygen.LocalPartySaveData, code []byte, hardened bool) (*keygen.LocalPartySaveData, *big.Int, error) {
 	if !hardened {
 		deltaInt := big.NewInt(0).SetBytes(code)
 		gDelta := crypto_tss.ScalarBaseMult(ec, deltaInt)
@@ -145,6 +145,28 @@ func derivePublicKey(ec elliptic.Curve, key keygen.LocalPartySaveData, code []by
 	}
 }
 
+// this method will not change the shamir shares
+func derivePublicKeyPk(ec elliptic.Curve, pk *crypto_tss.ECPoint, code []byte, hardened bool) (*crypto_tss.ECPoint, *big.Int, error) {
+	if !hardened {
+		deltaInt := big.NewInt(0).SetBytes(code)
+		gDelta := crypto_tss.ScalarBaseMult(ec, deltaInt)
+		newPk, err := pk.Add(gDelta)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error creating new extended child public key")
+		}
+		return newPk, deltaInt, nil
+	} else {
+		deltaInt, newPk, err := derivingPubkeyFromPath(pk, code, path, ec)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error deriving pubkey from path")
+		}
+		pkNew, err := crypto_tss.NewECPoint(ec, newPk.X, newPk.Y)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error creating new extended child public key")
+		}
+		return pkNew, deltaInt, nil
+	}
+}
 func derivingPubkeyFromPath(masterPub *crypto_tss.ECPoint, chainCode []byte, path []uint32, ec elliptic.Curve) (*big.Int, *ckd.ExtendedKey, error) {
 	pk := ecdsa.PublicKey{
 		Curve: ec,
@@ -168,4 +190,11 @@ func derivingPubkeyFromPath(masterPub *crypto_tss.ECPoint, chainCode []byte, pat
 func ecPointToETHPubKey(ecPoint *crypto_tss.ECPoint) []byte {
 	pk := ecPoint.ToECDSAPubKey()
 	return crypto.FromECDSAPub(pk)
+}
+func ETHPubKeyToECPoint(pubKey []byte) (*crypto_tss.ECPoint, error) {
+	pk, err := crypto.UnmarshalPubkey(pubKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal pubkey: %w", err)
+	}
+	return crypto_tss.NewECPoint(tss.S256(), pk.X, pk.Y)
 }

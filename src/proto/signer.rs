@@ -43,15 +43,27 @@ pub struct Signature {
 pub struct PkRequest {
     #[prost(uint32, tag = "1")]
     pub curve_id: u32,
-    #[prost(message, optional, tag = "2")]
-    pub key_package: ::core::option::Option<KeyPackage>,
-    #[prost(bytes = "vec", tag = "3")]
+    #[prost(bytes = "vec", tag = "4")]
     pub derivation_delta: ::prost::alloc::vec::Vec<u8>,
+    #[prost(oneof = "pk_request::Source", tags = "2, 3")]
+    pub source: ::core::option::Option<pk_request::Source>,
+}
+/// Nested message and enum types in `PkRequest`.
+pub mod pk_request {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Source {
+        #[prost(message, tag = "2")]
+        KeyPackage(super::KeyPackage),
+        #[prost(bytes, tag = "3")]
+        PublicKey(::prost::alloc::vec::Vec<u8>),
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PkResponse {
     #[prost(bytes = "vec", tag = "1")]
     pub public_key: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub public_key_derived: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignerToCoordinatorMsg {
