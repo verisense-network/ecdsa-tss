@@ -500,7 +500,7 @@ func (x *DKGRequest) GetCoordinatorToSignerMsg() *CoordinatorToSignerMsg {
 
 type DKGResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// intermediate / final
+	// intermediate / final / error string
 	RespType string `protobuf:"bytes,1,opt,name=resp_type,json=respType,proto3" json:"resp_type,omitempty"`
 	// if is final, data is key package
 	KeyPackage *KeyPackage `protobuf:"bytes,2,opt,name=key_package,json=keyPackage,proto3" json:"key_package,omitempty"`
@@ -563,7 +563,7 @@ func (x *DKGResponse) GetSignerToCoordinatorMsg() *SignerToCoordinatorMsg {
 
 type SignRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// init / intermediate
+	// init / intermediate / error string
 	ReqType     string       `protobuf:"bytes,1,opt,name=req_type,json=reqType,proto3" json:"req_type,omitempty"`
 	SigningInfo *SigningInfo `protobuf:"bytes,2,opt,name=signing_info,json=signingInfo,proto3" json:"signing_info,omitempty"`
 	// if is intermediate, coordinator_to_signer_msg is not nil

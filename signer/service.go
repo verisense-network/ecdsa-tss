@@ -30,6 +30,7 @@ func StartSignerServer(port uint16) error {
 	}
 	grpcServer := grpc.NewServer()
 	pb.RegisterSignerServiceServer(grpcServer, &SignerServer{})
+	logger.Infof("Signer server started on port %d", port)
 	return grpcServer.Serve(lis)
 }
 
@@ -80,15 +81,20 @@ func checkBaseInfo(baseInfo *pb.BaseInfo) (curveId uint16, id uint16, ids []uint
 func (s *SignerServer) DKG(stream pb.SignerService_DKGServer) error {
 	sessionID := uuid.New().String()
 	logger := logger.Logger.With("session_id", sessionID)
+	logger.Info("DKG Started")
+	stream.Send(&pb.DKGResponse{
+		RespType: "empty",
+	})
 	req, err := stream.Recv()
 	if err == io.EOF {
 		logger.Warn("client closed stream (EOF)")
 		return nil
 	}
 	if err != nil {
-		logger.Error("receive error: %v\n", err)
+		logger.Errorf("receive error: %v\n", err)
 		return err
 	}
+	logger.Debugf("DKG request: %v", req)
 	// req.ReqType must be "init"
 	if req.ReqType != "init" {
 		logger.Errorf("the first request from client must be init, but got %s", req.ReqType)

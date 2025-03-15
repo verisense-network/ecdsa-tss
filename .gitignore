@@ -26,3 +26,11 @@ go.work.sum
 
 # log file
 **/log/*
+
+
+# Added by cargo
+
+/target
+
+Cargo.lock
+**/*.rs.bk

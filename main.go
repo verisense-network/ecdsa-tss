@@ -2,9 +2,13 @@ package main
 
 import (
 	"bsctss/config"
+	"bsctss/logger"
 	"bsctss/signer"
 )
 
 func main() {
-	signer.StartSignerServer(uint16(config.Config().Port))
+	err := signer.StartSignerServer(uint16(config.Config().Port))
+	if err != nil {
+		logger.Errorf("failed to start signer server: %v", err)
+	}
 }

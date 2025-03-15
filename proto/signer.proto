@@ -55,7 +55,9 @@ message DKGRequest {
   CoordinatorToSignerMsg coordinator_to_signer_msg = 3;
 }
 message DKGResponse {
-  // intermediate / final
+  // intermediate / final / empty
+  // the first response from coordinator to signer must be empty, since go-grpc will not send header for connection and tonic client will be blocked
+  // see the issue in https://github.com/hyperium/tonic/issues/515
   string resp_type = 1;
   // if is final, data is key package
   KeyPackage key_package = 2;
@@ -64,7 +66,7 @@ message DKGResponse {
 }
 
 message SignRequest{
-  // init / intermediate
+  // init / intermediate / error string
   string req_type = 1;
   SigningInfo signing_info = 2;
   // if is intermediate, coordinator_to_signer_msg is not nil

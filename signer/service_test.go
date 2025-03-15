@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+	"time"
 
 	pb "bsctss/signer/proto"
 
@@ -68,8 +69,11 @@ func singleNodeDKG(ctx context.Context, t *testing.T, port uint16, id uint32, in
 	defer conn.Close()
 
 	client := pb.NewSignerServiceClient(conn)
-
+	// calc time
+	start := time.Now()
 	stream, err := client.DKG(context.Background())
+	elapsed := time.Since(start)
+	t.Logf("time: %v", elapsed)
 	if err != nil {
 		t.Errorf("recv error: %v", err)
 		end <- err
@@ -97,6 +101,9 @@ func singleNodeDKG(ctx context.Context, t *testing.T, port uint16, id uint32, in
 				t.Errorf("recv error: %v", err)
 				end <- err
 				return
+			}
+			if resp.RespType == "empty" {
+				continue
 			}
 			if resp.RespType == "final" {
 				key <- resp.KeyPackage
