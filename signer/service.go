@@ -11,6 +11,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -122,7 +123,7 @@ func (s *SignerServer) DKG(stream pb.SignerService_DKGServer) error {
 		logger.Errorf("failed to generate key: %v", err)
 		return status.Error(codes.Internal, fmt.Sprintf("failed to generate key: %v", err))
 	}
-	_, pk, err := bytesToLocalPartySaveData(0, rawOut)
+	keyPackage, err := bytesToLocalPartySaveData(0, rawOut)
 	if err != nil {
 		logger.Errorf("failed to convert to local party save data: %v", err)
 		return status.Error(codes.Internal, fmt.Sprintf("failed to convert to local party save data: %v", err))
@@ -131,7 +132,7 @@ func (s *SignerServer) DKG(stream pb.SignerService_DKGServer) error {
 		RespType: "final",
 		KeyPackage: &pb.KeyPackage{
 			KeyPackage: rawOut,
-			PublicKey:  pk,
+			PublicKey:  ecPointToETHPubKey(keyPackage.ECDSAPub),
 		},
 	}
 	return stream.Send(resp)
@@ -153,7 +154,7 @@ func (s *SignerServer) Sign(stream pb.SignerService_SignServer) error {
 		logger.Errorf("the first request from client must be init, but got %s", req.ReqType)
 		return status.Error(codes.InvalidArgument, fmt.Sprintf("the first request from client must be init, but got %s", req.ReqType))
 	}
-	curveId, id, ids, threshold, err := checkBaseInfo(req.SignerInfo.BaseInfo)
+	curveId, id, ids, threshold, err := checkBaseInfo(req.SigningInfo.BaseInfo)
 	if err != nil {
 		logger.Errorf("invalid base info: %v", err)
 		return err
@@ -162,7 +163,7 @@ func (s *SignerServer) Sign(stream pb.SignerService_SignServer) error {
 	defer cancel()
 	in := make(chan *pb.CoordinatorToSignerMsg, 1000)
 	go listenSignCoordinatorToSignerMsg(stream, in, logger)
-	signature, err := signerSign(ctx, curveId, id, ids, threshold-1, req.SignerInfo.Message, req.SignerInfo.KeyPackage.KeyPackage, func(msg []byte, isBroadcast bool, to uint16) error {
+	signature, err := signerSign(ctx, curveId, id, ids, threshold-1, req.SigningInfo.Message, req.SigningInfo.KeyPackage.KeyPackage, req.SigningInfo.DerivationDelta, func(msg []byte, isBroadcast bool, to uint16) error {
 		// logger.Infof("Signing stream started for session %s with req %v", sessionID, req)
 		resp := &pb.SignResponse{
 			RespType: "intermediate",
@@ -187,6 +188,27 @@ func (s *SignerServer) Sign(stream pb.SignerService_SignServer) error {
 		Signature: signature,
 	}
 	return stream.Send(resp)
+}
+func (s *SignerServer) Pk(ctx context.Context, req *pb.PkRequest) (*pb.PkResponse, error) {
+	sessionID := uuid.New().String()
+	logger := logger.Logger.With("session_id", sessionID)
+	curveId, err := convertU32ToU16(req.CurveId)
+	if err != nil {
+		logger.Errorf("invalid curve_id: %v", err)
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid curve_id: %v", err))
+	}
+	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(config.Config().SigningTimeout))
+	defer cancel()
+	localPartySaveData, _, err := signerDeriveKeyPackage(ctx, curveId, req.KeyPackage.KeyPackage, req.DerivationDelta, logger)
+	if err != nil {
+		logger.Errorf("failed to convert to local party save data: %v", err)
+		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to convert to local party save data: %v", err))
+	}
+	pk := localPartySaveData.ECDSAPub.ToECDSAPubKey()
+	pkBytes := crypto.FromECDSAPub(pk)
+	return &pb.PkResponse{
+		PublicKey: pkBytes,
+	}, nil
 }
 func listenDKGCoordinatorToSignerMsg(stream pb.SignerService_DKGServer, in chan *pb.CoordinatorToSignerMsg, logger *zap.SugaredLogger) {
 	for {

@@ -4,6 +4,7 @@ import (
 	"bsctss/config"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -131,7 +132,23 @@ func signerDKG(ctx context.Context, curveId uint16, id uint16, parties []uint16,
 
 }
 
-func signerSign(ctx context.Context, curveId uint16, id uint16, parties []uint16, threshold uint16, message []byte, keyPackage []byte, sendMsgAsync func(msg []byte, isBroadcast bool, to uint16) error, in chan *pb.CoordinatorToSignerMsg, logger *zap.SugaredLogger) ([]byte, error) {
+func signerDeriveKeyPackage(ctx context.Context, curveId uint16, keyPackage []byte, derivationDelta []byte, logger *zap.SugaredLogger) (*keygen.LocalPartySaveData, *big.Int, error) {
+	curve := curveIdToCurve(curveId)
+	localPartySaveData, err := bytesToLocalPartySaveData(curveId, keyPackage)
+	if err != nil {
+		logger.Errorf("failed to convert to local party save data: %v", err)
+		return nil, nil, err
+	}
+	hash := sha256.Sum256(derivationDelta)
+	derivedKeyPackage, deltaInt, err := derivePublicKey(curve, *localPartySaveData, hash[:], true)
+	if err != nil {
+		logger.Errorf("failed to derive public key: %v", err)
+		return nil, nil, err
+	}
+	return derivedKeyPackage, deltaInt, nil
+}
+
+func signerSign(ctx context.Context, curveId uint16, id uint16, parties []uint16, threshold uint16, message []byte, keyPackage []byte, derivationDelta []byte, sendMsgAsync func(msg []byte, isBroadcast bool, to uint16) error, in chan *pb.CoordinatorToSignerMsg, logger *zap.SugaredLogger) ([]byte, error) {
 	if len(message) != 32 {
 		return nil, fmt.Errorf("message must be 32 bytes")
 	}
@@ -143,18 +160,22 @@ func signerSign(ctx context.Context, curveId uint16, id uint16, parties []uint16
 	params := tss.NewParameters(curve, tssCtx, pid, len(parties), int(threshold))
 	pid.Index = locatePartyIndex(params, pid)
 
-	localPartySaveData, pk, err := bytesToLocalPartySaveData(curveId, keyPackage)
+	// localPartySaveData, _, err := bytesToLocalPartySaveData(curveId, keyPackage)
+	// if err != nil {
+	// 	logger.Errorf("failed to convert to local party save data: %v", err)
+	// 	return nil, err
+	// }
+	localPartySaveData, deltaInt, err := signerDeriveKeyPackage(ctx, curveId, keyPackage, derivationDelta, logger)
 	if err != nil {
-		logger.Errorf("failed to convert to local party save data: %v", err)
+		logger.Errorf("failed to derive key package: %v", err)
 		return nil, err
 	}
-	logger.Infof("pk: %x", pk)
 
 	out := make(chan tss.Message, 100)
 	end := make(chan *common.SignatureData, 1)
 	msgToSign := hashToInt(message, curve)
 	// nine rounds
-	party := signing.NewLocalParty(msgToSign, params, *localPartySaveData, out, end)
+	party := signing.NewLocalPartyWithKDD(msgToSign, params, *localPartySaveData, deltaInt, out, end)
 
 	var endWG sync.WaitGroup
 	endWG.Add(1)

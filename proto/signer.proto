@@ -6,6 +6,7 @@ option go_package = "bsctss/signer/proto;proto";
 service SignerService {
   rpc DKG(stream DKGRequest) returns (stream DKGResponse);
   rpc Sign(stream SignRequest) returns (stream SignResponse);
+  rpc Pk(PkRequest) returns (PkResponse);
 }
 // curve_id 0 for S256, 1 for P256
 message BaseInfo {
@@ -14,10 +15,24 @@ message BaseInfo {
   uint32 threshold = 3;
   repeated uint32 ids = 4;
 }
-message SignerInfo {
+message SigningInfo {
   BaseInfo base_info = 1;
   KeyPackage key_package = 2;
   bytes message = 3;
+  bytes derivation_delta = 4;
+}
+message KeyPackage {
+  bytes key_package = 1;
+  // optional in request
+  bytes public_key = 2;
+}
+message PkRequest {
+  uint32 curve_id = 1;
+  KeyPackage key_package = 2;
+  bytes derivation_delta = 3;
+}
+message PkResponse {
+  bytes public_key = 1;
 }
 
 message SignerToCoordinatorMsg {
@@ -39,10 +54,6 @@ message DKGRequest {
   // if is intermediate, coordinator_to_signer_msg is not nil
   CoordinatorToSignerMsg coordinator_to_signer_msg = 3;
 }
-message KeyPackage {
-  bytes key_package = 1;
-  bytes public_key = 2;
-}
 message DKGResponse {
   // intermediate / final
   string resp_type = 1;
@@ -55,7 +66,7 @@ message DKGResponse {
 message SignRequest{
   // init / intermediate
   string req_type = 1;
-  SignerInfo signer_info = 2;
+  SigningInfo signing_info = 2;
   // if is intermediate, coordinator_to_signer_msg is not nil
   CoordinatorToSignerMsg coordinator_to_signer_msg = 3;
 }

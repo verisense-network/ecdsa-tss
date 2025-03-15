@@ -150,17 +150,16 @@ func singleNodeSign(ctx context.Context, t *testing.T, port uint16, id uint32, i
 	fmt.Println("id: ", id)
 	req := &pb.SignRequest{
 		ReqType: "init",
-		SignerInfo: &pb.SignerInfo{
+		SigningInfo: &pb.SigningInfo{
 			BaseInfo: &pb.BaseInfo{
 				CurveId:   0,
 				Id:        id,
 				Threshold: threshold,
 				Ids:       []uint32{1, 2},
 			},
-			Message: hash([]byte("test")),
-			KeyPackage: &pb.KeyPackage{
-				KeyPackage: keyPackage,
-			},
+			Message:         keccak256([]byte("test")),
+			KeyPackage:      &pb.KeyPackage{KeyPackage: keyPackage},
+			DerivationDelta: []byte{1, 2, 3, 4},
 		},
 	}
 	if err := stream.Send(req); err != nil {
@@ -398,10 +397,22 @@ func TestSign(t *testing.T) {
 			break
 		}
 	}
-	t.Logf("sig: %d", len(sig))
-	_, pk, err := bytesToLocalPartySaveData(0, []byte(key2))
+	go StartSignerServer(15203)
+	conn, err := grpc.NewClient("localhost:"+strconv.Itoa(int(15203)),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf("recv error: %v", err)
 	}
-	assert.True(t, verifySignature(hash([]byte("test")), sig, pk))
+	defer conn.Close()
+
+	client := pb.NewSignerServiceClient(conn)
+	resp, err := client.Pk(context.Background(), &pb.PkRequest{
+		CurveId:         0,
+		KeyPackage:      &pb.KeyPackage{KeyPackage: []byte(key2)},
+		DerivationDelta: []byte{1, 2, 3, 4},
+	})
+	if err != nil {
+		t.Fatalf("recv error: %v", err)
+	}
+	assert.True(t, verifySignature(keccak256([]byte("test")), sig, resp.PublicKey))
 }

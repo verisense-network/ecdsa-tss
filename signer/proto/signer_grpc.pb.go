@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	SignerService_DKG_FullMethodName  = "/signer.SignerService/DKG"
 	SignerService_Sign_FullMethodName = "/signer.SignerService/Sign"
+	SignerService_Pk_FullMethodName   = "/signer.SignerService/Pk"
 )
 
 // SignerServiceClient is the client API for SignerService service.
@@ -29,6 +30,7 @@ const (
 type SignerServiceClient interface {
 	DKG(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[DKGRequest, DKGResponse], error)
 	Sign(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SignRequest, SignResponse], error)
+	Pk(ctx context.Context, in *PkRequest, opts ...grpc.CallOption) (*PkResponse, error)
 }
 
 type signerServiceClient struct {
@@ -65,12 +67,23 @@ func (c *signerServiceClient) Sign(ctx context.Context, opts ...grpc.CallOption)
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SignerService_SignClient = grpc.BidiStreamingClient[SignRequest, SignResponse]
 
+func (c *signerServiceClient) Pk(ctx context.Context, in *PkRequest, opts ...grpc.CallOption) (*PkResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PkResponse)
+	err := c.cc.Invoke(ctx, SignerService_Pk_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SignerServiceServer is the server API for SignerService service.
 // All implementations must embed UnimplementedSignerServiceServer
 // for forward compatibility.
 type SignerServiceServer interface {
 	DKG(grpc.BidiStreamingServer[DKGRequest, DKGResponse]) error
 	Sign(grpc.BidiStreamingServer[SignRequest, SignResponse]) error
+	Pk(context.Context, *PkRequest) (*PkResponse, error)
 	mustEmbedUnimplementedSignerServiceServer()
 }
 
@@ -86,6 +99,9 @@ func (UnimplementedSignerServiceServer) DKG(grpc.BidiStreamingServer[DKGRequest,
 }
 func (UnimplementedSignerServiceServer) Sign(grpc.BidiStreamingServer[SignRequest, SignResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method Sign not implemented")
+}
+func (UnimplementedSignerServiceServer) Pk(context.Context, *PkRequest) (*PkResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Pk not implemented")
 }
 func (UnimplementedSignerServiceServer) mustEmbedUnimplementedSignerServiceServer() {}
 func (UnimplementedSignerServiceServer) testEmbeddedByValue()                       {}
@@ -122,13 +138,36 @@ func _SignerService_Sign_Handler(srv interface{}, stream grpc.ServerStream) erro
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SignerService_SignServer = grpc.BidiStreamingServer[SignRequest, SignResponse]
 
+func _SignerService_Pk_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SignerServiceServer).Pk(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SignerService_Pk_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SignerServiceServer).Pk(ctx, req.(*PkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SignerService_ServiceDesc is the grpc.ServiceDesc for SignerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var SignerService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "signer.SignerService",
 	HandlerType: (*SignerServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Pk",
+			Handler:    _SignerService_Pk_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "DKG",

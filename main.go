@@ -1,9 +1,10 @@
 package main
 
 import (
-	"bsctss/logger"
+	"bsctss/config"
+	"bsctss/signer"
 )
 
 func main() {
-	logger.With("a", "b").Info("hello world")
+	signer.StartSignerServer(uint16(config.Config().Port))
 }
