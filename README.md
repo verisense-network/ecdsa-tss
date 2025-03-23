@@ -4,7 +4,7 @@ This project is a Rust wrapper for [tss-lib](https://github.com/bnb-chain/tss-li
 
 ## Features
 
-This library includes the following main protocols:
+This library includes the following main protocols:
 
 - **Key Generation**: Enables the creation of key shares without the need for a trusted third party.
 - **Signing**: Allows the generation of digital signatures using key shares.
