@@ -86,7 +86,7 @@ async fn main() {
     println!("Signing successful: {:?}", signature);
 }
 ```
-
+For more detailed examples and usage patterns, please refer to the test cases in [Example](./src/lib.rs).
 
 ## License
 
