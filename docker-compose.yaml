@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  go-server:
+    build: .
+    ports:
+      - "${PORT}:${PORT}"
+    environment:
+      - PORT=${PORT}
+    command: [ "-p", "${PORT}" ]
