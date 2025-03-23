@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package signer;
-option go_package = "bsctss/signer/proto;proto";
+option go_package = "ecdsa-tss/signer/proto;proto";
 
 service SignerService {
   rpc DKG(stream DKGRequest) returns (stream DKGResponse);

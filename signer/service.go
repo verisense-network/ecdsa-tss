@@ -1,10 +1,10 @@
 package signer
 
 import (
-	"bsctss/config"
-	"bsctss/logger"
-	pb "bsctss/signer/proto"
 	"context"
+	"ecdsa-tss/config"
+	"ecdsa-tss/logger"
+	pb "ecdsa-tss/signer/proto"
 	"fmt"
 	"io"
 	"net"

@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bsctss/config"
-	"bsctss/logger"
-	"bsctss/signer"
+	"ecdsa-tss/config"
+	"ecdsa-tss/logger"
+	"ecdsa-tss/signer"
 )
 
 func main() {

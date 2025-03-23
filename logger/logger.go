@@ -1,7 +1,7 @@
 package logger
 
 import (
-	"bsctss/config"
+	"ecdsa-tss/config"
 	"fmt"
 	"os"
 	"path"

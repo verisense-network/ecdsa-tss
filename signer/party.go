@@ -1,10 +1,10 @@
 package signer
 
 import (
-	"bsctss/config"
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"ecdsa-tss/config"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	pb "bsctss/signer/proto"
+	pb "ecdsa-tss/signer/proto"
 
 	"github.com/bnb-chain/tss-lib/v2/common"
 	crypto_tss "github.com/bnb-chain/tss-lib/v2/crypto"

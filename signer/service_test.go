@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	pb "bsctss/signer/proto"
+	pb "ecdsa-tss/signer/proto"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"

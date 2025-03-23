@@ -1,9 +1,10 @@
-module bsctss
+module ecdsa-tss
 
 go 1.23.3
 
 require (
 	github.com/bnb-chain/tss-lib/v2 v2.0.2
+	github.com/btcsuite/btcd v0.23.4
 	github.com/ethereum/go-ethereum v1.15.5
 	github.com/google/uuid v1.6.0
 	github.com/jessevdk/go-flags v1.6.1
@@ -15,7 +16,6 @@ require (
 
 require (
 	github.com/agl/ed25519 v0.0.0-20200225211852-fd4d107ace12 // indirect
-	github.com/btcsuite/btcd v0.23.4 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1 // indirect
 	github.com/btcsuite/btcutil v1.0.2 // indirect

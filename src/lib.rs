@@ -6,13 +6,13 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::transport::Channel;
 
-use signer_rpc::{DkgRequest, SignRequest, Signature, signer_service_client::SignerServiceClient};
-pub struct BscTssSignerClient {
+use signer_rpc::{DkgRequest, SignRequest, signer_service_client::SignerServiceClient};
+pub struct EcdsaTssSignerClient {
     client: SignerServiceClient<Channel>,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum BscTssSignerClientError {
+pub enum EcdsaTssSignerClientError {
     #[error("Tonic error: {0}")]
     TonicError(#[from] tonic::Status),
 
@@ -37,8 +37,8 @@ pub enum BscTssSignerClientError {
     #[error("Init error: {0}")]
     InitError(String),
 }
-impl BscTssSignerClient {
-    pub async fn new(port: u16) -> Result<Self, BscTssSignerClientError> {
+impl EcdsaTssSignerClient {
+    pub async fn new(port: u16) -> Result<Self, EcdsaTssSignerClientError> {
         let url = format!("http://localhost:{}", port);
         let channel = Channel::from_shared(url)?.connect().await?;
         Ok(Self {
@@ -51,7 +51,7 @@ impl BscTssSignerClient {
         mut in_chan: UnboundedReceiver<signer_rpc::CoordinatorToSignerMsg>,
         out_chan: UnboundedSender<signer_rpc::SignerToCoordinatorMsg>,
         timeout: time::Duration,
-    ) -> Result<signer_rpc::KeyPackage, BscTssSignerClientError> {
+    ) -> Result<signer_rpc::KeyPackage, EcdsaTssSignerClientError> {
         let request = DkgRequest {
             req_type: "init".into(),
             base_info: Some(base_info),
@@ -63,14 +63,14 @@ impl BscTssSignerClient {
         let mut stream = self.client.dkg(request_stream).await?.into_inner();
         stream_sender
             .send(request)
-            .map_err(|e| BscTssSignerClientError::InitError(e.to_string()))?;
+            .map_err(|e| EcdsaTssSignerClientError::InitError(e.to_string()))?;
         let handler = tokio::spawn(async move {
             let sleep = tokio::time::sleep(timeout);
             tokio::pin!(sleep);
             loop {
                 tokio::select! {
                     _ = &mut sleep => {
-                        let _ = result_sender.send(Err(BscTssSignerClientError::DkgFailed("DKG process timeout".into())));
+                        let _ = result_sender.send(Err(EcdsaTssSignerClientError::DkgFailed("DKG process timeout".into())));
                         return;
                     }
                     Ok(Some(response)) = stream.message() => {
@@ -84,13 +84,13 @@ impl BscTssSignerClient {
                             if let Some(msg) = response.signer_to_coordinator_msg {
                                 if let Err(e) = out_chan.send(msg) {
                                     result_sender
-                                        .send(Err(BscTssSignerClientError::SendError(e)))
+                                        .send(Err(EcdsaTssSignerClientError::SendError(e)))
                                         .unwrap();
                                     return;
                                 }
                             } else {
                                 result_sender
-                                    .send(Err(BscTssSignerClientError::DkgFailed(
+                                    .send(Err(EcdsaTssSignerClientError::DkgFailed(
                                         "No signer to coordinator message in intermediate response"
                                             .into(),
                                     )))
@@ -104,7 +104,7 @@ impl BscTssSignerClient {
                                 return;
                             } else {
                                 result_sender
-                                    .send(Err(BscTssSignerClientError::DkgFailed(
+                                    .send(Err(EcdsaTssSignerClientError::DkgFailed(
                                         "No key package in final response".into(),
                                     )))
                                     .unwrap();
@@ -113,13 +113,13 @@ impl BscTssSignerClient {
                         }
                         "error" => {
                             result_sender
-                                .send(Err(BscTssSignerClientError::DkgFailed(response.error)))
+                                .send(Err(EcdsaTssSignerClientError::DkgFailed(response.error)))
                                 .unwrap();
                             return;
                         }
                         other => {
                             result_sender
-                                .send(Err(BscTssSignerClientError::DkgFailed(format!(
+                                .send(Err(EcdsaTssSignerClientError::DkgFailed(format!(
                                     "Unexpected response type: {}",
                                     other
                                 ))))
@@ -153,12 +153,13 @@ impl BscTssSignerClient {
         handler.abort();
         result
     }
+    // return public key and derived public key
     pub async fn derive_pk_from_pk(
         mut self,
         curve_id: u32,
         public_key: Vec<u8>,
         derivation_delta: Vec<u8>,
-    ) -> Result<(Vec<u8>, Vec<u8>), BscTssSignerClientError> {
+    ) -> Result<(Vec<u8>, Vec<u8>), EcdsaTssSignerClientError> {
         let request = signer_rpc::PkRequest {
             curve_id,
             source: Some(signer_rpc::pk_request::Source::PublicKey(public_key)),
@@ -172,7 +173,7 @@ impl BscTssSignerClient {
         curve_id: u32,
         key_package: signer_rpc::KeyPackage,
         derivation_delta: Vec<u8>,
-    ) -> Result<(Vec<u8>, Vec<u8>), BscTssSignerClientError> {
+    ) -> Result<(Vec<u8>, Vec<u8>), EcdsaTssSignerClientError> {
         let request = signer_rpc::PkRequest {
             curve_id,
             source: Some(signer_rpc::pk_request::Source::KeyPackage(key_package)),
@@ -187,7 +188,7 @@ impl BscTssSignerClient {
         mut in_chan: UnboundedReceiver<signer_rpc::CoordinatorToSignerMsg>,
         out_chan: UnboundedSender<signer_rpc::SignerToCoordinatorMsg>,
         timeout: time::Duration,
-    ) -> Result<signer_rpc::Signature, BscTssSignerClientError> {
+    ) -> Result<signer_rpc::Signature, EcdsaTssSignerClientError> {
         let request = SignRequest {
             req_type: "init".into(),
             signing_info: Some(signing_info),
@@ -199,14 +200,14 @@ impl BscTssSignerClient {
         let mut stream = self.client.sign(request_stream).await?.into_inner();
         stream_sender
             .send(request)
-            .map_err(|e| BscTssSignerClientError::InitError(e.to_string()))?;
+            .map_err(|e| EcdsaTssSignerClientError::InitError(e.to_string()))?;
         let handler = tokio::spawn(async move {
             let sleep = tokio::time::sleep(timeout);
             tokio::pin!(sleep);
             loop {
                 tokio::select! {
                     _ = &mut sleep => {
-                        let _ = result_sender.send(Err(BscTssSignerClientError::SignFailed("Sign process timeout".into())));
+                        let _ = result_sender.send(Err(EcdsaTssSignerClientError::SignFailed("Sign process timeout".into())));
                         return;
                     }
                     Ok(Some(response)) = stream.message() => {
@@ -220,13 +221,13 @@ impl BscTssSignerClient {
                             if let Some(msg) = response.signer_to_coordinator_msg {
                                 if let Err(e) = out_chan.send(msg) {
                                     result_sender
-                                        .send(Err(BscTssSignerClientError::SendError(e)))
+                                        .send(Err(EcdsaTssSignerClientError::SendError(e)))
                                         .unwrap();
                                     return;
                                 }
                             } else {
                                 result_sender
-                                    .send(Err(BscTssSignerClientError::DkgFailed(
+                                    .send(Err(EcdsaTssSignerClientError::DkgFailed(
                                         "No signer to coordinator message in intermediate response"
                                             .into(),
                                     )))
@@ -240,7 +241,7 @@ impl BscTssSignerClient {
                                 return;
                             } else {
                                 result_sender
-                                    .send(Err(BscTssSignerClientError::DkgFailed(
+                                    .send(Err(EcdsaTssSignerClientError::DkgFailed(
                                         "No signature in final response".into(),
                                     )))
                                     .unwrap();
@@ -249,13 +250,13 @@ impl BscTssSignerClient {
                         }
                         "error" => {
                             result_sender
-                                .send(Err(BscTssSignerClientError::SignFailed(response.error)))
+                                .send(Err(EcdsaTssSignerClientError::SignFailed(response.error)))
                                 .unwrap();
                             return;
                         }
                         other => {
                             result_sender
-                                .send(Err(BscTssSignerClientError::DkgFailed(format!(
+                                .send(Err(EcdsaTssSignerClientError::DkgFailed(format!(
                                     "Unexpected response type: {}",
                                     other
                                 ))))
@@ -290,13 +291,13 @@ impl BscTssSignerClient {
         result
     }
 }
+#[cfg(test)]
 mod test {
     use std::time;
 
-    use rand::Rng;
     use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-    use crate::{BscTssSignerClient, BscTssSignerClientError, signer_rpc};
+    use crate::{EcdsaTssSignerClient, EcdsaTssSignerClientError, signer_rpc};
     async fn dkg_single_node(
         port: u16,
         id: u32,
@@ -307,9 +308,11 @@ mod test {
         (
             UnboundedSender<signer_rpc::CoordinatorToSignerMsg>,
             UnboundedReceiver<signer_rpc::SignerToCoordinatorMsg>,
-            tokio::sync::oneshot::Receiver<Result<signer_rpc::KeyPackage, BscTssSignerClientError>>,
+            tokio::sync::oneshot::Receiver<
+                Result<signer_rpc::KeyPackage, EcdsaTssSignerClientError>,
+            >,
         ),
-        BscTssSignerClientError,
+        EcdsaTssSignerClientError,
     > {
         let base_info = signer_rpc::BaseInfo {
             id,
@@ -317,7 +320,7 @@ mod test {
             threshold,
             ids,
         };
-        let client = BscTssSignerClient::new(port).await?;
+        let client = EcdsaTssSignerClient::new(port).await?;
         let (in_tx, in_rx) = tokio::sync::mpsc::unbounded_channel();
         let (out_tx, out_rx) = tokio::sync::mpsc::unbounded_channel();
         let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
@@ -342,9 +345,11 @@ mod test {
         (
             UnboundedSender<signer_rpc::CoordinatorToSignerMsg>,
             UnboundedReceiver<signer_rpc::SignerToCoordinatorMsg>,
-            tokio::sync::oneshot::Receiver<Result<signer_rpc::Signature, BscTssSignerClientError>>,
+            tokio::sync::oneshot::Receiver<
+                Result<signer_rpc::Signature, EcdsaTssSignerClientError>,
+            >,
         ),
-        BscTssSignerClientError,
+        EcdsaTssSignerClientError,
     > {
         let signing_info = signer_rpc::SigningInfo {
             base_info: Some(signer_rpc::BaseInfo {
@@ -357,7 +362,7 @@ mod test {
             message,
             derivation_delta,
         };
-        let client = BscTssSignerClient::new(port).await?;
+        let client = EcdsaTssSignerClient::new(port).await?;
         let (in_tx, in_rx) = tokio::sync::mpsc::unbounded_channel();
         let (out_tx, out_rx) = tokio::sync::mpsc::unbounded_channel();
         let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
@@ -624,13 +629,13 @@ mod test {
             .expect("Failed to recover signature");
         println!("recovery_id: {}", recovery_id);
         println!("completed sign");
-        let client = BscTssSignerClient::new(29197).await.unwrap();
+        let client = EcdsaTssSignerClient::new(29197).await.unwrap();
         let (public_key, public_key_derived1) = client
             .derive_pk_from_key_package(0, res1_copy, vec![1, 2, 3])
             .await
             .unwrap();
         assert!(public_key_derived1 == public_key_derived);
-        let client = BscTssSignerClient::new(29197).await.unwrap();
+        let client = EcdsaTssSignerClient::new(29197).await.unwrap();
         let (_, public_key_derived2) = client
             .derive_pk_from_pk(0, public_key, vec![1, 2, 3])
             .await
@@ -638,11 +643,10 @@ mod test {
         assert!(public_key_derived2 == public_key_derived);
     }
     use futures::future::join_all;
-
     #[tokio::test]
     async fn test_signer_service_client_test() {
         let mut handles = vec![];
-        for _ in 0..1 {
+        for _ in 0..10 {
             handles.push(tokio::spawn(async move {
                 test_signer_service_client().await;
             }));

@@ -1,5 +1,5 @@
 [package]
-name = "bsc-tss"
+name = "ecdsa-tss"
 version = "0.1.0"
 edition = "2024"
 
