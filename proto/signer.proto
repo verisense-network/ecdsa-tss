@@ -7,6 +7,7 @@ service SignerService {
   rpc DKG(stream DKGRequest) returns (stream DKGResponse);
   rpc Sign(stream SignRequest) returns (stream SignResponse);
   rpc Pk(PkRequest) returns (PkResponse);
+  rpc CheckPk(CheckPkRequest) returns (CheckPkResponse);
 }
 // curve_id 0 for S256, 1 for P256
 message BaseInfo {
@@ -44,6 +45,19 @@ message PkResponse {
   bytes public_key_derived = 2;
 }
 
+message CheckPkRequest {
+  uint32 crypto_type = 1;
+  bytes pkid = 2;
+  bytes public_key = 3;
+  bytes public_key_derived = 4;
+  bytes delta = 5;
+  repeated uint32 signer_id = 6;
+  repeated bytes public_key_info = 7;
+}
+message CheckPkResponse {
+  bool is_valid = 1;
+  string error = 2;
+}
 message SignerToCoordinatorMsg {
   bytes msg = 1;
   bool is_broadcast = 2;

@@ -1,17 +1,23 @@
 package signer
 
 import (
+	"bytes"
 	"context"
 	"ecdsa-tss/config"
 	"ecdsa-tss/logger"
 	pb "ecdsa-tss/signer/proto"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"slices"
 	"time"
 
+	crypto_tss "github.com/bnb-chain/tss-lib/v2/crypto"
+	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
+	"github.com/bnb-chain/tss-lib/v2/tss"
 	"github.com/google/uuid"
+	bolt "go.etcd.io/bbolt"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -20,6 +26,7 @@ import (
 
 type SignerServer struct {
 	pb.UnimplementedSignerServiceServer
+	db *bolt.DB
 }
 
 func StartSignerServer(port uint16) error {
@@ -27,8 +34,13 @@ func StartSignerServer(port uint16) error {
 	if err != nil {
 		return err
 	}
+	db, err := bolt.Open(config.Config().DBPath, 0600, nil)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
 	grpcServer := grpc.NewServer()
-	pb.RegisterSignerServiceServer(grpcServer, &SignerServer{})
+	pb.RegisterSignerServiceServer(grpcServer, &SignerServer{db: db})
 	logger.Infof("Signer server started on port %d", port)
 	return grpcServer.Serve(lis)
 }
@@ -151,6 +163,7 @@ func (s *SignerServer) DKG(stream pb.SignerService_DKGServer) error {
 			Error:    fmt.Sprintf("failed to convert to local party save data: %v", err),
 		})
 	}
+
 	resp := &pb.DKGResponse{
 		RespType: "final",
 		KeyPackage: &pb.KeyPackage{
@@ -159,6 +172,83 @@ func (s *SignerServer) DKG(stream pb.SignerService_DKGServer) error {
 		},
 	}
 	return stream.Send(resp)
+}
+func (s *SignerServer) CheckPk(ctx context.Context, req *pb.CheckPkRequest) (*pb.CheckPkResponse, error) {
+
+	shares := make([]*keygen.LocalPartySaveData, len(req.PublicKeyInfo))
+	deltaInt := big.NewInt(0)
+	for i, pk := range req.PublicKeyInfo {
+		var err error
+		shares[i], err = bytesToLocalPartySaveData(0, pk)
+		if err != nil {
+			logger.Errorf("invalid public key info: %v", err)
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid public key info: %v", err))
+		}
+		_, _, delta, err := signerDeriveKeyPackageAndUpdateShamirShares(0, pk, req.Delta, logger.Logger)
+		if err != nil {
+			logger.Errorf("invalid public key info: %v", err)
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid public key info: %v", err))
+		}
+		if deltaInt.Cmp(delta) == 0 || deltaInt.Cmp(big.NewInt(0)) == 0 {
+			deltaInt = delta
+		} else {
+			logger.Errorf("delta is not the same")
+			return &pb.CheckPkResponse{
+				IsValid: false,
+			}, nil
+		}
+	}
+	sk := ReconstructKey(shares)
+	sk_derived := big.NewInt(0).Add(sk, deltaInt)
+	sk_derived.Mod(sk_derived, tss.S256().Params().N)
+	// check if secret is the private key of the public key
+	pk := crypto_tss.ScalarBaseMult(tss.S256(), sk)
+	pk_derived := crypto_tss.ScalarBaseMult(tss.S256(), sk_derived)
+	pk_eth := ecPointToETHPubKey(pk)
+	pk_derived_eth := ecPointToETHPubKey(pk_derived)
+	if !bytes.Equal(req.PublicKey, pk_eth) || !bytes.Equal(req.PublicKeyDerived, pk_derived_eth) {
+		logger.Errorf("public key is not the same")
+		return &pb.CheckPkResponse{
+			IsValid: false,
+		}, nil
+	}
+	s.db.Update(func(tx *bolt.Tx) error {
+		// pk_derived_eth as key, sk_derived as value
+		bucket := tx.Bucket([]byte("pk"))
+		if bucket == nil {
+			return fmt.Errorf("bucket not found")
+		}
+		// snapshot the db
+
+		return bucket.Put([]byte(pk_derived_eth), sk_derived.Bytes())
+	})
+	return &pb.CheckPkResponse{
+		IsValid: true,
+	}, nil
+}
+func ReconstructKey(shares []*keygen.LocalPartySaveData) *big.Int {
+	prime := tss.S256().Params().N
+	secret := big.NewInt(0)
+	for i, share := range shares {
+		num := big.NewInt(1)
+		den := big.NewInt(1)
+		for j, other := range shares {
+			if i == j {
+				continue
+			}
+			temp := new(big.Int).Neg(other.ShareID)
+			temp.Mod(temp, prime)
+			num.Mul(num, temp).Mod(num, prime)
+			temp = new(big.Int).Sub(share.ShareID, other.ShareID)
+			temp.Mod(temp, prime)
+			den.Mul(den, temp).Mod(den, prime)
+		}
+		lambda := new(big.Int).ModInverse(den, prime)
+		lambda.Mul(lambda, num).Mod(lambda, prime)
+		term := new(big.Int).Mul(share.Xi, lambda)
+		secret.Add(secret, term).Mod(secret, prime)
+	}
+	return secret
 }
 func (s *SignerServer) Sign(stream pb.SignerService_SignServer) error {
 	sessionID := uuid.New().String()

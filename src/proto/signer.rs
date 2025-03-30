@@ -66,6 +66,30 @@ pub struct PkResponse {
     pub public_key_derived: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CheckPkRequest {
+    #[prost(uint32, tag = "1")]
+    pub crypto_type: u32,
+    #[prost(bytes = "vec", tag = "2")]
+    pub pkid: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub public_key: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub public_key_derived: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "5")]
+    pub delta: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint32, repeated, tag = "6")]
+    pub signer_id: ::prost::alloc::vec::Vec<u32>,
+    #[prost(bytes = "vec", repeated, tag = "7")]
+    pub public_key_info: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CheckPkResponse {
+    #[prost(bool, tag = "1")]
+    pub is_valid: bool,
+    #[prost(string, tag = "2")]
+    pub error: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignerToCoordinatorMsg {
     #[prost(bytes = "vec", tag = "1")]
     pub msg: ::prost::alloc::vec::Vec<u8>,
@@ -291,6 +315,30 @@ pub mod signer_service_client {
             let path = http::uri::PathAndQuery::from_static("/signer.SignerService/Pk");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new("signer.SignerService", "Pk"));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn check_pk(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CheckPkRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::CheckPkResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/signer.SignerService/CheckPk",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("signer.SignerService", "CheckPk"));
             self.inner.unary(req, path, codec).await
         }
     }

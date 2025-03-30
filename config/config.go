@@ -20,6 +20,7 @@ type ConfigStruct struct {
 	SigningTimeout      time.Duration `long:"signing-timeout" description:"Signing timeout" default:"10s"`
 	PkTimeout           time.Duration `long:"pk-timeout" description:"PK timeout" default:"1s"`
 	Port                int           `short:"p" long:"port" description:"Port" default:"29197"`
+	DBPath              string        `long:"db-path" description:"DB path" default:".pk.db"`
 }
 
 var config *ConfigStruct

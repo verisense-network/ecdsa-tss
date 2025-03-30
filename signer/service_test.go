@@ -305,6 +305,7 @@ func TestDKG(t *testing.T) {
 	go singleNodeDKG(ctx, t, 15202, 3, in3, out3, end3, key3)
 	total := 0
 	k := []byte{}
+	// var all_shares []*keygen.LocalPartySaveData
 	for {
 		select {
 		case err := <-end1:
@@ -318,6 +319,9 @@ func TestDKG(t *testing.T) {
 			t.Logf("key1: %v ,pk: %x", hash, key.PublicKey)
 			assert.True(t, bytes.Equal(k, key.PublicKey) || bytes.Equal(k, []byte{}))
 			k = key.PublicKey
+			// localSaveData := &keygen.LocalPartySaveData{}
+			// json.Unmarshal(key.KeyPackage, &localSaveData)
+			// all_shares = append(all_shares, localSaveData)
 			// os.MkdirAll("testdata", 0755)
 			// os.WriteFile("testdata/key1.json", key.KeyPackage, 0644)
 			total++
@@ -326,6 +330,10 @@ func TestDKG(t *testing.T) {
 			t.Logf("key2: %v ,pk: %x", hash, key.PublicKey)
 			assert.True(t, bytes.Equal(k, key.PublicKey) || bytes.Equal(k, []byte{}))
 			k = key.PublicKey
+			// localSaveData := &keygen.LocalPartySaveData{}
+			// json.Unmarshal(key.KeyPackage, &localSaveData)
+			// fmt.Printf("localSaveData: %#v\n", string(key.KeyPackage))
+			// all_shares = append(all_shares, localSaveData)
 			// os.MkdirAll("testdata", 0755)
 			// os.WriteFile("testdata/key2.json", key.KeyPackage, 0644)
 			total++
@@ -334,6 +342,9 @@ func TestDKG(t *testing.T) {
 			t.Logf("key3: %v ,pk: %x", hash, key.PublicKey)
 			assert.True(t, bytes.Equal(k, key.PublicKey) || bytes.Equal(k, []byte{}))
 			k = key.PublicKey
+			// localSaveData := &keygen.LocalPartySaveData{}
+			// json.Unmarshal(key.KeyPackage, &localSaveData)
+			// all_shares = append(all_shares, localSaveData)
 			// os.MkdirAll("testdata", 0755)
 			// os.WriteFile("testdata/key3.json", key.KeyPackage, 0644)
 			total++
@@ -348,6 +359,39 @@ func TestDKG(t *testing.T) {
 			break
 		}
 	}
+	// fmt.Printf("all_shares: %#v\n", all_shares)
+	// public := ecPointToETHPubKey(all_shares[0].ECDSAPub)
+	// fmt.Printf("public: %x\n", public)
+	// fmt.Printf("public: %x\n", public)
+	// fmt.Printf("public: %x\n", public)
+
+	// secret := ReconstructKey(all_shares)
+	// secretHex := secret.Text(16)
+	// fmt.Printf("secretHex: %x\n", secretHex)
+	// fmt.Printf("secret: %x\n", secretHex)
+	// fmt.Printf("public: %x\n", public)
+
+	// privHex := secretHex
+	// fmt.Printf("privHex: %x\n", privHex)
+
+	// privateKey, err := crypto.HexToECDSA(privHex)
+	// if err != nil {
+	// 	log.Fatalf("failed to load private key: %v", err)
+	// }
+	// fmt.Printf("private key (D) = 0x%x\n", privateKey.D)
+
+	// publicKey := privateKey.Public()
+	// publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	// if !ok {
+	// 	log.Fatal("cannot convert public key to ECDSA public key type")
+	// }
+
+	// pubBytesUncompressed := crypto.FromECDSAPub(publicKeyECDSA)
+	// fmt.Printf("public key (uncompressed, 65 bytes) = 0x%x\n", pubBytesUncompressed)
+
+	// x := publicKeyECDSA.X
+	// y := publicKeyECDSA.Y
+	// fmt.Printf("public key coordinates: X = 0x%s, Y = 0x%s\n", x.Text(16), y.Text(16))
 }
 
 func TestSign(t *testing.T) {

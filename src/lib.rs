@@ -6,7 +6,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::transport::Channel;
 
-use signer_rpc::{DkgRequest, SignRequest, signer_service_client::SignerServiceClient};
+use signer_rpc::{signer_service_client::SignerServiceClient, DkgRequest, SignRequest};
 pub struct EcdsaTssSignerClient {
     client: SignerServiceClient<Channel>,
 }
@@ -182,6 +182,13 @@ impl EcdsaTssSignerClient {
         let response = self.client.pk(request).await?.into_inner();
         Ok((response.public_key, response.public_key_derived))
     }
+    pub async fn check_pk(
+        mut self,
+        check_pk_request: signer_rpc::CheckPkRequest,
+    ) -> Result<signer_rpc::CheckPkResponse, EcdsaTssSignerClientError> {
+        let response = self.client.check_pk(check_pk_request).await?.into_inner();
+        Ok(response)
+    }
     pub async fn sign(
         mut self,
         signing_info: signer_rpc::SigningInfo,
@@ -297,7 +304,7 @@ mod test {
 
     use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-    use crate::{EcdsaTssSignerClient, EcdsaTssSignerClientError, signer_rpc};
+    use crate::{signer_rpc, EcdsaTssSignerClient, EcdsaTssSignerClientError};
     async fn dkg_single_node(
         port: u16,
         id: u32,
