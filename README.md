@@ -87,6 +87,25 @@ async fn main() {
 }
 ```
 For more detailed examples and usage patterns, please refer to the test cases in [Example](./src/lib.rs).
+## How to Start in Verisense
+
+1. Run `ecdsa-tss` on all nodes
+
+2. For coordinator node:
+   Add the following flag:
+   ```
+   --tss-coordinator 12944
+   ```
+
+3. For signer nodes:
+   Add the following flag:
+   ```
+   --tss-signer /ip4/<coordinator-ip>/tcp/12944/p2p/<coordinator-peer-id>
+   ```
+
+4. Restart the nodes
+
+5. If DKG starts successfully, the setup is complete
 
 ## License
 
